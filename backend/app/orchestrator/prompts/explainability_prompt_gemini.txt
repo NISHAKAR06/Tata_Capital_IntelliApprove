@@ -1,0 +1,1 @@
+Provide a clear, user-friendly explanation of the loan decision.Explain complex underwriting rationales in plain English, referencing each factor and its pass/fail status. Keep tone factual and supportive.

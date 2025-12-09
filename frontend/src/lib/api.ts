@@ -2,6 +2,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface OrchestratorState {
+  conversation_id?: string;
   stage?: string;
   loan_amount?: number;
   tenure?: number;
@@ -12,7 +13,7 @@ export interface OrchestratorState {
   kyc_verified?: boolean;
   credit_score?: number;
   explainability?: Record<string, any>;
-  sanction_data?: Record<string, any>;
+  sanction?: Record<string, any>;
   gamification?: Record<string, any>;
 }
 
@@ -30,12 +31,24 @@ export interface OrchestratorRequest {
 }
 
 export interface OrchestratorResponse {
+  conversation_id?: string;
   stage: string;
   message_to_user: string;
-  worker_called: string;
-  worker_payload: Record<string, any>;
+  invoke_worker: {
+    name?: string;
+    payload?: Record<string, any>;
+  };
   state_updates: OrchestratorState;
-  action: 'continue' | 'request_upload' | 'end' | 'process_salary_slip' | 'human_handoff';
+  next_action:
+    | 'continue'
+    | 'request_upload'
+    | 'request_otp'
+    | 'process_salary_slip'
+    | 'human_handoff'
+    | 'manual_review'
+    | 'end';
+  explainability?: Record<string, any> | null;
+  audit_entry?: Record<string, any> | null;
   fallback_needed: boolean;
   model_version?: string;
 }
@@ -75,7 +88,7 @@ export interface CreditScoreResponse {
 
 export interface UploadResponse {
   success: boolean;
-  message: string;
+  message?: string;
   documentId?: string;
   file_id?: string;
 }
@@ -102,7 +115,7 @@ export const getSessionId = (): string => {
 export const callOrchestrator = async (
   orchestratorPayload: OrchestratorRequest
 ): Promise<OrchestratorResponse> => {
-  const response = await fetch(`${API_BASE_URL}/orchestrate`, {
+  const response = await fetch(`${API_BASE_URL}/api/v1/chat/orchestrate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -165,19 +178,22 @@ export const getCreditScore = async (customerId: string): Promise<CreditScoreRes
 };
 
 // Upload salary slip (wire to orchestrator doc event)
-export const uploadSalarySlip = async (file: File, sessionId: string): Promise<UploadResponse> => {
+export const uploadSalarySlip = async (file: File, conversationId: string): Promise<UploadResponse> => {
   try {
     const formData = new FormData();
-    formData.append('salarySlip', file);
-    formData.append('session_id', sessionId);
-    
-    const response = await fetch(`${API_BASE_URL}/uploadSalarySlip`, {
+    formData.append('file', file);
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/upload/salary-slip?conversation_id=${encodeURIComponent(conversationId)}`,
+      {
       method: 'POST',
-      body: formData,
-    });
-    
+        body: formData,
+      }
+    );
+
     if (!response.ok) throw new Error('Upload failed');
-    return await response.json();
+    const ocr = await response.json();
+    return { success: true, message: 'Document uploaded', file_id: ocr.file_id };
   } catch (error) {
     console.error('Upload error:', error);
     // Mock success for demo

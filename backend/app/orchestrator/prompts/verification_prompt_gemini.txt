@@ -1,0 +1,1 @@
+Guide the user through OTP verification in under 80 words.Confirm OTP verification, highlight any data mismatches politely, and outline remaining checks before underwriting begins.

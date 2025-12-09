@@ -22,3 +22,26 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Backend Secrets & Config
+backend/.env
+backend/app/config/keys/*.json
+!backend/app/config/keys/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Database
+*.db
+*.sqlite3
+
+
+
