@@ -1,0 +1,302 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 220 41% 48%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 220 41% 60%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 220 25% 20%;
+
+    --muted: 210 15% 93%;
+    --muted-foreground: 220 10% 45%;
+
+    --accent: 220 20% 92%;
+    --accent-foreground: 220 41% 30%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 220 41% 48%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 210 20% 88%;
+    --input: 210 20% 92%;
+    --ring: 220 41% 48%;
+
+    --radius: 0.75rem;
+
+    --chat-user: 220 41% 48%;
+    --chat-user-foreground: 0 0% 100%;
+    --chat-bot: 210 20% 96%;
+    --chat-bot-foreground: 220 25% 10%;
+    --chat-empathy: 280 60% 96%;
+
+    --gradient-header: linear-gradient(135deg, hsl(220 41% 48%), hsl(220 41% 35%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 20% 98%));
+
+    --shadow-sm: 0 1px 2px hsl(220 25% 10% / 0.05);
+    --shadow-md: 0 4px 12px hsl(220 25% 10% / 0.08);
+    --shadow-lg: 0 8px 24px hsl(220 25% 10% / 0.12);
+    --shadow-glow: 0 0 20px hsl(220 41% 48% / 0.2);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 220 25% 8%;
+    --foreground: 210 20% 98%;
+
+    --card: 220 25% 12%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 220 25% 12%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 220 41% 52%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 220 41% 65%;
+
+    --secondary: 220 20% 18%;
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 220 20% 20%;
+    --muted-foreground: 210 15% 55%;
+
+    --accent: 220 20% 25%;
+    --accent-foreground: 220 41% 80%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 220 41% 52%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 45%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 20% 22%;
+    --input: 220 20% 22%;
+    --ring: 220 41% 52%;
+
+    --chat-user: 220 41% 52%;
+    --chat-user-foreground: 0 0% 100%;
+    --chat-bot: 220 20% 18%;
+    --chat-bot-foreground: 210 20% 95%;
+    --chat-empathy: 280 40% 20%;
+
+    --gradient-header: linear-gradient(135deg, hsl(220 41% 48%), hsl(220 41% 35%));
+    --gradient-card: linear-gradient(180deg, hsl(220 25% 14%), hsl(220 25% 10%));
+
+    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.2);
+    --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.3);
+    --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.4);
+    --shadow-glow: 0 0 20px hsl(220 41% 52% / 0.3);
+
+    --sidebar-background: 220 25% 10%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 220 41% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 18%;
+    --sidebar-accent-foreground: 210 20% 90%;
+    --sidebar-border: 220 20% 22%;
+    --sidebar-ring: 220 41% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', 'Noto Sans Tamil', system-ui, sans-serif;
+  }
+
+  .font-tamil {
+    font-family: 'Noto Sans Tamil', 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+@layer components {
+  .chat-bubble-user {
+    @apply bg-chat-user text-chat-user-foreground rounded-2xl rounded-br-md px-4 py-3;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .chat-bubble-bot {
+    @apply bg-chat-bot text-chat-bot-foreground rounded-2xl rounded-bl-md px-4 py-3;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .chat-bubble-empathy {
+    @apply bg-chat-empathy rounded-2xl rounded-bl-md px-4 py-3;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium;
+  }
+
+  .status-approved {
+    @apply bg-success/15 text-success;
+  }
+
+  .status-pending {
+    @apply bg-warning/15 text-warning;
+  }
+
+  .status-rejected {
+    @apply bg-destructive/15 text-destructive;
+  }
+
+  .glass-panel {
+    @apply bg-card/80 backdrop-blur-md border border-border/50;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all duration-200;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent hover:bg-muted active:scale-[0.98] transition-all duration-200;
+  }
+
+  .input-field {
+    @apply bg-input border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring/50 transition-all;
+  }
+}
+
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--success) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px hsl(var(--success) / 0);
+  }
+}
+
+@keyframes progress-bar {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.animate-typing-dot {
+  animation: typing-dot 1.4s ease-in-out infinite;
+}
+
+.animate-typing-dot-2 {
+  animation: typing-dot 1.4s ease-in-out infinite 0.2s;
+}
+
+.animate-typing-dot-3 {
+  animation: typing-dot 1.4s ease-in-out infinite 0.4s;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.3s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out forwards;
+}
+
+.animate-slide-in-bottom {
+  animation: slide-in-bottom 0.3s ease-out forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-progress {
+  animation: progress-bar 2s ease-out forwards;
+}
