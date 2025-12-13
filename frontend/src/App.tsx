@@ -3,33 +3,47 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { HelmetProvider } from "react-helmet-async";
-import { LoanApplication } from "./components/ui/loan-application";
+import { LanguageProvider } from "@/contexts/LanguageContext";
+import Index from "./pages/Index";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
-import Settings from "./pages/Settings";
+import LoanChat from "./pages/dashboard/LoanChat";
+import ProgressTracker from "./pages/dashboard/ProgressTracker";
+import CurrentLoanStatus from "./pages/dashboard/CurrentLoanStatus";
+import DocumentUpload from "./pages/dashboard/DocumentUpload";
+import SanctionLetter from "./pages/dashboard/SanctionLetter";
+import LoanHistory from "./pages/dashboard/LoanHistory";
+import Analytics from "./pages/dashboard/Analytics";
 import NotFound from "./pages/NotFound";
-import LoanChatbot from "./components/LoanChatbot";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <HelmetProvider>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <LanguageProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<LoanApplication />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/chat" element={<LoanChatbot />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard/chat" element={<LoanChat />} />
+          <Route path="/dashboard/progress" element={<ProgressTracker />} />
+          <Route path="/dashboard/status" element={<CurrentLoanStatus />} />
+          <Route path="/dashboard/documents" element={<DocumentUpload />} />
+          <Route path="/dashboard/sanction" element={<SanctionLetter />} />
+          <Route path="/dashboard/history" element={<LoanHistory />} />
+          <Route path="/dashboard/analytics" element={<Analytics />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
         </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </HelmetProvider>
+      </LanguageProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
 );
 
 export default App;
