@@ -22,7 +22,7 @@ export const GlobalHeader = () => {
   }
 
   return (
-    <header className="fixed top-24 right-4 z-[100]">
+    <header className="fixed top-4 right-4 z-[100]">
       <div className="flex items-center gap-2 p-3 bg-card/95 backdrop-blur-xl border border-border/50 rounded-full shadow-xl hover:shadow-2xl transition-all duration-300">
         <Select value={language} onValueChange={setLanguage}>
           <SelectTrigger className="w-20 h-8 bg-transparent border-0 focus:ring-0 focus:ring-offset-0 text-sm">

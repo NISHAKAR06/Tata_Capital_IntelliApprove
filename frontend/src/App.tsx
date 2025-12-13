@@ -17,6 +17,7 @@ import SanctionLetter from "./pages/dashboard/SanctionLetter";
 import LoanHistory from "./pages/dashboard/LoanHistory";
 import Analytics from "./pages/dashboard/Analytics";
 import NotFound from "./pages/NotFound";
+import { GlobalHeader } from "@/components/ui/global-header";
 
 const queryClient = new QueryClient();
 
@@ -28,20 +29,21 @@ const App = () => (
       <ThemeProvider>
         <LanguageProvider>
           <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/dashboard/chat" element={<LoanChat />} />
-            <Route path="/dashboard/progress" element={<ProgressTracker />} />
-            <Route path="/dashboard/status" element={<CurrentLoanStatus />} />
-            <Route path="/dashboard/documents" element={<DocumentUpload />} />
-            <Route path="/dashboard/sanction" element={<SanctionLetter />} />
-            <Route path="/dashboard/history" element={<LoanHistory />} />
-            <Route path="/dashboard/analytics" element={<Analytics />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+            <GlobalHeader />
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/chat" element={<LoanChat />} />
+              <Route path="/dashboard/progress" element={<ProgressTracker />} />
+              <Route path="/dashboard/status" element={<CurrentLoanStatus />} />
+              <Route path="/dashboard/documents" element={<DocumentUpload />} />
+              <Route path="/dashboard/sanction" element={<SanctionLetter />} />
+              <Route path="/dashboard/history" element={<LoanHistory />} />
+              <Route path="/dashboard/analytics" element={<Analytics />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
           </BrowserRouter>
         </LanguageProvider>
       </ThemeProvider>

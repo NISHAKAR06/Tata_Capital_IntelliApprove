@@ -1,16 +1,25 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Languages, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const navItems = [];
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border/50">
@@ -44,8 +53,45 @@ export const Navbar = () => {
             ))}
           </div>
 
-          {/* Desktop CTA */}
+          {/* Desktop Actions */}
           <div className="hidden lg:flex items-center gap-4">
+            {location.pathname === "/" && (
+              <>
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger className="w-20 h-8 bg-transparent border-0 focus:ring-0 focus:ring-offset-0 text-sm">
+                    <div className="flex items-center gap-1">
+                      <Languages className="w-4 h-4" />
+                      <SelectValue />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="z-[60]">
+                    <SelectItem value="en">EN</SelectItem>
+                    <SelectItem value="hi">हिंदी</SelectItem>
+                    <SelectItem value="ta">தமிழ்</SelectItem>
+                    <SelectItem value="ml">മലയാളം</SelectItem>
+                    <SelectItem value="te">తెలుగు</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <div className="w-px h-4 bg-border" />
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  className="w-8 h-8 hover:bg-accent rounded-full"
+                  title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+                >
+                  {theme === 'light' ? (
+                    <Moon className="w-4 h-4" />
+                  ) : (
+                    <Sun className="w-4 h-4" />
+                  )}
+                </Button>
+
+                <div className="w-px h-6 bg-border" />
+              </>
+            )}
             <Link to="/login">
               <Button variant="ghost">{t("login")}</Button>
             </Link>
@@ -100,6 +146,42 @@ export const Navbar = () => {
                 transition={{ delay: 0.4 }}
                 className="pt-4 border-t border-border space-y-3"
               >
+                {location.pathname === "/" && (
+                  <>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="flex-1">
+                        <Select value={language} onValueChange={setLanguage}>
+                          <SelectTrigger className="h-10 w-full">
+                            <div className="flex items-center gap-1">
+                              <Languages className="w-4 h-4" />
+                              <SelectValue />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="en">EN</SelectItem>
+                            <SelectItem value="hi">हिंदी</SelectItem>
+                            <SelectItem value="ta">தமிழ்</SelectItem>
+                            <SelectItem value="ml">മലയാളം</SelectItem>
+                            <SelectItem value="te">తెలుగు</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={toggleTheme}
+                        className="w-10 h-10 rounded-full"
+                      >
+                        {theme === 'light' ? (
+                          <Moon className="w-4 h-4" />
+                        ) : (
+                          <Sun className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                )}
                 <Link to="/login" onClick={() => setIsOpen(false)}>
                   <Button variant="outline" className="w-full">{t("login")}</Button>
                 </Link>
