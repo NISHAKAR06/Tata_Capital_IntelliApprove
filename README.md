@@ -1,10 +1,10 @@
-# Tata Capital IntelliApprove 🚀
+# Tata Capital IntelliApprove
 
-> **An Agentic AI Lending Platform that transforms loan applications from static forms into dynamic, empathetic conversations.**
+**An agentic AI lending platform that transforms loan applications from static forms into dynamic, explainable conversations.**
 
 ---
 
-## 📖 Executive Summary
+## Executive Summary
 
 ### 1️⃣ Problem (Why Tata Capital needs this)
 The current digital lending process is broken. It is rigid, impersonal, and opaque. Customers face lengthy forms, "black box" rejections without explanation, and zero guidance when they get stuck. For Tata Capital, this leads to high drop-off rates (often >70%), operational bottlenecks, and a transactional relationship that fails to build long-term loyalty.
@@ -13,7 +13,7 @@ The current digital lending process is broken. It is rigid, impersonal, and opaq
 **IntelliApprove** is a next-generation **Agentic AI Lending Platform** that reimagines lending as a seamless, transparent conversation. It is not just a chatbot; it is a team of specialized AI agents working in unison. It acts as a 24/7 financial advisor that understands **emotion**, explains **decisions**, and **gamifies** the journey—ensuring every customer feels heard, understood, and valued.
 
 ### 3️⃣ How it works (High-level)
-The system is powered by a **Master Orchestrator** that dynamically coordinates specialized Google Gemini-powered agents:
+The system is powered by a **Master Orchestrator** that dynamically coordinates specialized LLM-powered agents (running on a local Ollama model):
 *   **Sales Agent:** Engages the user and discovers needs.
 *   **Verification Agent:** Instantly extracts data from uploaded documents (e.g., salary slips) using OCR.
 *   **Pricing Engine:** Calculates personalized interest rates in real-time based on loyalty and risk.
@@ -33,7 +33,7 @@ The system is powered by a **Master Orchestrator** that dynamically coordinates 
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```mermaid
 graph TD
@@ -79,14 +79,14 @@ graph TD
 ┌─────────────────────────────────────────────────────────────────────────┐
 │              MASTER AGENT (Enhanced AI Orchestrator)                    │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │ 🧠 EMOTIONAL INTELLIGENCE LAYER (NEW)                            │   │
+│  │ EMOTIONAL INTELLIGENCE LAYER                                    │   │
 │  │  • Real-time sentiment analysis                                  │   │
 │  │  • Tone adaptation engine                                        │   │
 │  │  • Empathy response generator                                    │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  Core Components:                                                       │
-│  • LLM: Google Gemini 1.5 Pro / Flash                                   │
+│  • LLM: Local Ollama model (configurable)                               │
 │  • Orchestration: Custom State Machine                                  │
 │  • Memory: SQL + Vector Context                                         │
 │  • Voice: Browser Speech API + TTS                                      │
@@ -116,25 +116,25 @@ graph TD
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
 | **Frontend** | React, TypeScript, Vite, Tailwind CSS, Shadcn UI |
 | **Backend** | Python 3.10+, FastAPI, Uvicorn |
-| **AI / LLM** | **Google Gemini 1.5 Flash & Pro** (via `google-generativeai`) |
-| **Orchestration** | Custom Agentic State Machine (Python) |
+| **AI / LLM** | Local Ollama models (HTTP API) |
+| **Orchestration** | Custom agentic state machine (Python) |
 | **Database** | SQLite (Dev) / PostgreSQL (Prod), SQLAlchemy ORM |
-| **Infrastructure** | Google Cloud Platform (GCP) Service Accounts |
+| **Infrastructure** | Local / containerised deployment, optional cloud backing services |
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 *   Python 3.10+
 *   Node.js & npm
-*   Google Gemini API Key
+*   Ollama installed and running locally (with at least one model pulled, e.g. `llama3`)
 
 ### 1. Backend Setup
 ```bash
@@ -148,14 +148,23 @@ python -m venv venv
 pip install -r requirements.txt
 
 # Configure Environment
-# Create a .env file in backend/ and add:
-# GEMINI_API_KEY=your_api_key_here
+# Create a .env file in backend/ and add, for example:
+# OLLAMA_BASE_URL=http://localhost:11434
+# OLLAMA_MODEL_DEFAULT=llama3
 # ENVIRONMENT=local
 
-# Run the Server
-uvicorn app.main:create_app --factory --reload
+# Run the Server (manual mode)
+uvicorn app.main:app --reload
 ```
 *Backend runs on `http://localhost:8000`*
+
+On Windows, you can instead run the helper batch script from the repo root:
+
+```bat
+run_servers.bat
+```
+
+This starts both the mock servers and the FastAPI backend in separate terminals.
 
 ### 2. Frontend Setup
 ```bash
@@ -170,7 +179,7 @@ npm run dev
 
 ---
 
-## 🧪 Testing the Flow
+## Testing the Flow
 1.  Open the frontend.
 2.  **Sales:** Type "I need a personal loan of 5 lakhs".
 3.  **Verification:** The agent will ask for verification (simulated OTP).
@@ -180,4 +189,4 @@ npm run dev
 
 ---
 
-**Built for Tata Capital Hackathon 2025**
+This implementation is suitable for local demos, hackathons, and internal evaluations, and can be extended to call real services in a production environment.
