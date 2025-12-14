@@ -11,13 +11,23 @@ class Settings(BaseSettings):
     project_name: str = "Tata Capital IntelliApprove"
     environment: str = Field(default="local", env="ENVIRONMENT")
     api_v1_prefix: str = Field(default="/api/v1", env="API_V1_PREFIX")
-    cors_origins: List[str] = Field(default_factory=lambda: ["*"])  # tighten in prod
+    cors_origins: List[str] = Field(default_factory=lambda: ["http://localhost:8080", "http://localhost:5173", "*"])  # Allow frontend
 
-    # LLM / Gemini
-    gemini_api_key: Optional[str] = Field(default=None, env="GEMINI_API_KEY")
-    gemini_model_flash: str = "gemini-1.5-flash-001"
-    gemini_model_pro: str = "gemini-1.5-pro-001"
-    gemini_model_vision: str = "gemini-1.5-pro-vision-001"
+    # LLM / Ollama
+    llm_provider: str = Field(default="ollama", env="LLM_PROVIDER", description="LLM provider identifier (currently only 'ollama' is supported)")
+    # Example env:
+    #   OLLAMA_BASE_URL=http://localhost:11434
+    #   OLLAMA_MODEL_DEFAULT=mistral
+    #   OLLAMA_MODEL_UNDERWRITING=llama2
+    ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
+    # Default Ollama model for most agents (fallback)
+    ollama_model_default: Optional[str] = Field(default="llama3", env="OLLAMA_MODEL_DEFAULT")
+    # Per-agent Ollama models so each agent can use a fine-tuned model
+    ollama_model_master: Optional[str] = Field(default=None, env="OLLAMA_MODEL_MASTER")
+    ollama_model_sales: Optional[str] = Field(default=None, env="OLLAMA_MODEL_SALES")
+    ollama_model_verification: Optional[str] = Field(default=None, env="OLLAMA_MODEL_VERIFICATION")
+    ollama_model_sanction: Optional[str] = Field(default=None, env="OLLAMA_MODEL_SANCTION")
+    ollama_model_underwriting: Optional[str] = Field(default=None, env="OLLAMA_MODEL_UNDERWRITING")
 
     # OpenAI (fallback / LLM enhancements)
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
@@ -36,12 +46,16 @@ class Settings(BaseSettings):
     whatsapp_api_token: Optional[str] = Field(default=None, env="WHATSAPP_API_TOKEN")
     whatsapp_phone_id: Optional[str] = Field(default=None, env="WHATSAPP_PHONE_ID")
 
-    # Bureau & CRM (mock for now)
-    bureau_api_base: str = Field(default="http://mock-bureau.internal", env="BUREAU_API_BASE")
+    # Bureau, CRM, OfferMart, Notification (mock microservices in local dev)
+    # Defaults point to the local FastAPI mock servers started via scripts.run_mock_servers
+    bureau_api_base: str = Field(default="http://localhost:8002/api/credit-bureau", env="BUREAU_API_BASE")
     bureau_api_key: Optional[str] = Field(default=None, env="BUREAU_API_KEY")
 
-    crm_api_base: str = Field(default="http://mock-crm.internal", env="CRM_API_BASE")
+    crm_api_base: str = Field(default="http://localhost:8001/api/crm", env="CRM_API_BASE")
     crm_api_key: Optional[str] = Field(default=None, env="CRM_API_KEY")
+
+    offermart_api_base: str = Field(default="http://localhost:8003/api/offer-mart", env="OFFERMART_API_BASE")
+    notification_api_base: str = Field(default="http://localhost:8004/api/notification", env="NOTIFICATION_API_BASE")
 
     # Database
     database_url: str = Field(
@@ -55,6 +69,14 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     log_file: str = Field(default="logs/app.log", env="LOG_FILE")
+
+    # Vector search / embeddings (Weaviate + Sentence-Transformers)
+    embeddings_model_name: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        env="EMBEDDINGS_MODEL_NAME",
+    )
+    weaviate_url: str = Field(default="http://localhost:8080", env="WEAVIATE_URL")
+    weaviate_api_key: Optional[str] = Field(default=None, env="WEAVIATE_API_KEY")
 
     # Security / PII
     encryption_key: Optional[str] = Field(default=None, env="ENCRYPTION_KEY")

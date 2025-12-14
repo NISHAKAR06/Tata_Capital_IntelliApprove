@@ -1,6 +1,6 @@
 """
 Intent classification from user text.
-Uses keyword matching and simple NLP; can be upgraded to Gemini.
+Uses keyword matching and simple NLP; can be upgraded to an LLM-powered classifier.
 """
 from typing import Optional
 
@@ -17,6 +17,12 @@ class IntentClassifier:
         "ask_timeline": ["how long", "timeline", "days", "when", "approval"],
         "escalate": ["human", "speak", "agent", "representative", "मनुष्य"],
         "abandon": ["no thanks", "later", "goodbye", "exit", "quit"],
+        "positive_interest": ["yes", "i want loan", "tell me more", "interested", "proceed", "apply", "ok"],
+        "negative": ["not interested", "no thanks", "cancel"],
+        "proceed_agreement": ["ok proceed", "let's do it", "apply now", "agree", "done"],
+        "modification_request": ["lower emi", "different tenure", "change", "modify", "reduce"],
+        "otp_submission": ["otp is", "code is", "1234", "5678", "here is otp"], # Simplified
+        "kyc_mismatch": ["wrong details", "incorrect", "not me", "error"],
     }
 
     @staticmethod

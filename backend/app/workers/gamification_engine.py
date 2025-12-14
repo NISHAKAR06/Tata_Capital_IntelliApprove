@@ -5,11 +5,27 @@ from typing import Dict
 
 
 class GamificationEngine:
-    def assign_badge(self, stage: str, intents_completed: int) -> Dict[str, str]:
+    def assign_badge(self, stage: str, intents_completed: int) -> Dict[str, str | int]:
+        """Calculate points, level, and badges based on progress."""
+        points = intents_completed * 10
         if stage == "SANCTION":
+            points += 500
             badge = "Deal Closer"
-        elif intents_completed > 3:
+            level = "Expert"
+        elif stage == "UNDERWRITING":
+            points += 200
+            badge = "Financial Wizard"
+            level = "Intermediate"
+        elif intents_completed > 5:
             badge = "Loan Pro"
+            level = "Advanced"
         else:
             badge = "Getting Started"
-        return {"badge": badge, "message": f"Unlocked badge: {badge}"}
+            level = "Novice"
+
+        return {
+            "badge": badge,
+            "points": points,
+            "level": level,
+            "message": f"🎉 Level Up! You are now a {level}. Badge unlocked: {badge} (+{points} pts)"
+        }

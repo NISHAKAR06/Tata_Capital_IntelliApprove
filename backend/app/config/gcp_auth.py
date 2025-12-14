@@ -31,7 +31,7 @@ def load_api_key(key_file: str) -> Optional[str]:
 
 
 class GCPAuthManager:
-    """Manages GCP authentication for Gemini and other services."""
+    """Manages GCP authentication for GCP-backed services."""
 
     def __init__(self):
         self.settings = get_settings()
@@ -58,7 +58,7 @@ class GCPAuthManager:
 
     @property
     def is_authenticated(self) -> bool:
-        return self._service_account is not None and bool(self.settings.gemini_api_key)
+        return self._service_account is not None
 
     @property
     def service_account(self) -> Optional[dict]:

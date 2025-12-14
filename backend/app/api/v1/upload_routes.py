@@ -33,6 +33,8 @@ async def upload_salary_slip(
     state.salary_slip.net_monthly_salary = result.net_salary
     state.salary_slip.confidence = result.confidence
 
+    # Hand control back to orchestrator so it can move
+    # from DOCUMENT_UPLOAD -> SANCTION based on salary slip.
     req = OrchestratorRequest(state=state, event="document_uploaded")
-    resp = orchestrator.handle_request(req)
+    resp = await orchestrator.orchestrate(req)
     return resp

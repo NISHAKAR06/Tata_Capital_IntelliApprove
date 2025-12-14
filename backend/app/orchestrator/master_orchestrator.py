@@ -5,19 +5,20 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from app.config.gemini_client import GeminiClient
-from app.orchestrator.decision_engine import compute_emi, compute_personalized_rate, run_underwriting_rules
+from app.config.ollama_client import OllamaClient
+from app.config.settings import get_settings
 from app.orchestrator.emotion_detector import EmotionDetector
 from app.orchestrator.intent_classifier import IntentClassifier
-from app.orchestrator.router import StageRouter
 from app.orchestrator.state_manager import StateManager
+from app.orchestrator.prompts import get_master_system_prompt
 from app.schemas.audit import AuditEntry
-from app.schemas.conversation_state import OrchestratorRequest, OrchestratorResponse, OrchestratorState, StageType
+from app.schemas.conversation_state import EmotionState, OrchestratorRequest, OrchestratorResponse, OrchestratorState, StageType
 from app.schemas.underwriting import UnderwritingExplainability
 from app.services.analytics import AnalyticsTracker
 from app.services.bureau_service import BureauService
 from app.services.crm_service import CRMService
 from app.services.offermart_service import OffermartService
+from app.services.notification_service import NotificationService
 from app.services.vector_service import VectorService
 from app.utils.time_utils import utc_now_iso
 from app.workers.gamification_engine import GamificationEngine
@@ -40,16 +41,26 @@ class MasterOrchestrator:
         bureau_service: Optional[BureauService] = None,
         analytics: Optional[AnalyticsTracker] = None,
         offer_service: Optional[OffermartService] = None,
+        notification_service: Optional[NotificationService] = None,
         vector_service: Optional[VectorService] = None,
     ) -> None:
         self.state_manager = state_manager
+        settings = get_settings()
         self.crm = crm_service or CRMService()
         self.bureau = bureau_service or BureauService()
         self.analytics = analytics or AnalyticsTracker()
         self.offers = offer_service or OffermartService()
+        self.notifications = notification_service or NotificationService()
         self.vectors = vector_service or VectorService()
-        self.router = StageRouter()
-        self.llm_client = GeminiClient()
+
+        # LLM for Master Agent (can use a dedicated fine-tuned Ollama model)
+        model_name = settings.ollama_model_master or settings.ollama_model_default
+        self.llm_client = OllamaClient(model=model_name)
+        self.master_system_prompt = get_master_system_prompt() or (
+            "You are 'IntelliApprove', an AI loan assistant for Tata Capital. "
+            "Greet the customer warmly and explain in one short paragraph how you can help with personal loans. "
+            "Always end by asking how much they need and for how long."
+        )
         self.sales_agent = SalesAgent()
         self.verification_agent = VerificationAgent()
         self.underwriting_agent = UnderwritingAgent()
@@ -57,181 +68,451 @@ class MasterOrchestrator:
         self.gamification_engine = GamificationEngine()
         self.pricing_engine = PricingEngine()
         self.scoring_engine = ScoringEngine()
+        self.emotion_detector = EmotionDetector()
+        self.intent_classifier = IntentClassifier()
 
-    def handle_request(self, payload: OrchestratorRequest) -> OrchestratorResponse:
+    async def process_message(
+        self,
+        session_id: str,
+        user_input: str,
+        language: str = "en",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """High-level helper matching the design doc API.
+
+        This wraps `orchestrate` under the hood, so both REST and WebSocket
+        callers can either use the strict OrchestratorRequest schema or this
+        simpler signature (session_id + text + language).
+        """
+
+        # Load or initialise state
+        state = self.state_manager.get_state(session_id) or OrchestratorState(
+            conversation_id=session_id,
+            language=language,
+        )
+
+        req = OrchestratorRequest(
+            user_message=user_input,
+            state=state,
+        )
+
+        resp = await self.orchestrate(req)
+
+        return {
+            "type": "ai_message",
+            "message": resp.message_to_user,
+            "agent": "master",
+            "action": resp.next_action,
+            "stage": resp.stage,
+            "state": resp.state_updates,
+            "conversation_id": resp.conversation_id,
+        }
+
+    async def orchestrate(self, payload: OrchestratorRequest) -> OrchestratorResponse:
+        """
+        Master orchestration logic with clear decision points.
+        Replaces the previous handle_request logic with the new Decision Tree.
+        """
+        # 1. Hydrate / initialise state
         state = payload.state
-        conversation_id = state.conversation_id or str(uuid4())
-        state.conversation_id = conversation_id
-        self._hydrate_crm_snapshot(state)
+        if not state.conversation_id:
+            state.conversation_id = f"conv_{uuid4().hex[:10]}"
+        user_input = payload.user_message or ""
+        
+        # Ensure CRM / customer data is present
+        if not state.customer_profile:
+            # If the caller passed a customer_profile with an id, hydrate it via CRMService
+            incoming_profile = payload.customer_profile or {}
+            customer_id = incoming_profile.get("customer_id")
 
-        stage = self.router.determine_stage(state, payload.event)
-        state.stage = stage
+            if customer_id:
+                # Use the lightweight CRM mock to fetch a richer snapshot
+                state.customer_profile = self.crm.get_customer_profile(customer_id)
+            elif incoming_profile:
+                # Fallback: trust whatever structured profile the caller provided
+                state.customer_profile = incoming_profile
+            else:
+                # Demo fallback when no profile is provided
+                self._hydrate_crm_snapshot(state)
 
-        inference_context = self._enrich_state(state, payload)
-        explainability = self._maybe_run_underwriting(state)
-        worker_payload = self._build_worker_payload(stage, state, explainability)
-        message = self._compose_message(stage, state, explainability, payload.user_message, inference_context)
+        # 2. Analyze Input
+        emotion_result = self.emotion_detector.detect(user_input)
+        intent_name, intent_conf = self.intent_classifier.classify(user_input)
+        
+        # Language Detection (Simple)
+        if "english" in user_input.lower() and "tell" in user_input.lower():
+            state.language = "en"
+        elif "hindi" in user_input.lower() or "hinglish" in user_input.lower():
+            state.language = "hi"
 
-        audit_entry = self._create_audit_entry(stage, payload, worker_payload, message)
-        state.audit_log.append(audit_entry.dict())
-        self.state_manager.upsert_state(state)
+        state.last_intent = intent_name
 
-        response = OrchestratorResponse(
-            conversation_id=conversation_id,
-            stage=stage,
-            message_to_user=message,
-            invoke_worker={"name": worker_payload["worker"], "payload": worker_payload["payload"]},
-            state_updates=state.dict(),
-            next_action=self.router.next_action(stage, state),
-            explainability=explainability.dict() if explainability else None,
-            audit_entry=audit_entry.dict(),
-            fallback_needed=state.flags.fallback_needed,
+        # Normalise emotion into EmotionState for clean Pydantic serialization
+        if isinstance(emotion_result, EmotionState):
+            state.emotion = emotion_result
+        elif isinstance(emotion_result, dict):
+            # Pydantic will coerce, but doing it explicitly avoids warnings
+            state.emotion = EmotionState(**emotion_result)
+        else:
+            state.emotion = EmotionState()
+
+        # 3. Decision Tree Execution
+        response_message = ""
+        worker_action = None
+        
+        # Initialize stage if None
+        if state.stage is None:
+            state.stage = "NEW"
+
+        next_stage = state.stage
+
+        # DECISION POINT 1: New Conversation
+        if state.stage == "NEW":
+            next_stage = "GREETING"
+            # Prefer an LLM-generated greeting so the experience is truly
+            # agentic, but fall back to a fixed copy if Ollama is not
+            # available or fails.
+            if self.llm_client.available:
+                llm_greeting = self.llm_client.generate(
+                    system_prompt=self.master_system_prompt,
+                    user_prompt=(
+                        "A new customer has just opened the chat window but "
+                        "has not typed anything yet. Start the conversation."
+                    ),
+                    max_tokens=160,
+                )
+                response_message = llm_greeting or (
+                    "Hi, I'm IntelliApprove, your AI loan assistant from Tata Capital. "
+                    "I can help you explore personal loan options tailored to you. "
+                    "To get started, tell me how much you need and for how long."
+                )
+            else:
+                response_message = (
+                    "Hi, I'm IntelliApprove, your AI loan assistant from Tata Capital. "
+                    "I can help you explore personal loan options tailored to you. "
+                    "To get started, tell me how much you need and for how long."
+                )
+            state.stage = next_stage
+
+        # DECISION POINT 2: Greeting Response
+        elif state.stage == "GREETING":
+            if intent_name in ['positive_interest', 'ask_loan', 'proceed_agreement']:
+                next_stage = "SALES"
+                response_message = self.sales_agent.craft_pitch(
+                    context=state.dict(), 
+                    user_message=user_input, 
+                    mode='needs_discovery'
+                )
+            elif intent_name == 'negative':
+                response_message = "No problem! I'm here if you need funds later. Have a great day!"
+                next_stage = "COMPLETED"
+            elif intent_name == 'ask_rate' or intent_name == 'ask_emi':
+                 response_message = self.sales_agent.craft_pitch(
+                    context=state.dict(), 
+                    user_message=user_input, 
+                    mode='information_only'
+                )
+            else:
+                 # Default fallthrough to sales
+                 next_stage = "SALES"
+                 response_message = self.sales_agent.craft_pitch(context=state.dict(), user_message=user_input, mode='needs_discovery')
+
+        # DECISION POINT 3: Sales Engagement
+        elif state.stage == "SALES":
+            # Sub-decision 3A: Objections?
+            primary_emotion = None
+            if isinstance(emotion_result, dict):
+                primary_emotion = emotion_result.get("primary") or emotion_result.get("emotion")
+
+            if primary_emotion in ['anxiety', 'concern', 'confusion', 'sadness']:
+                concern_type = 'affordability_anxiety' if 'emi' in user_input.lower() or 'expensive' in user_input.lower() else 'general_concern'
+                
+                # Get objection handling data
+                objection_data = {}
+                if concern_type == 'affordability_anxiety':
+                    objection_data = self.sales_agent.handle_affordability_objection(state.customer_profile, state.loan_request.dict())
+                
+                response_message = self.sales_agent.craft_pitch(
+                    context={**state.dict(), **objection_data},
+                    user_message=user_input,
+                    mode='objection_handling',
+                    concern_type=concern_type
+                )
+            
+            # Sub-decision 3B: Agreement?
+            elif intent_name in ['proceed_agreement', 'positive_interest']:
+                next_stage = "VERIFICATION"
+                response_message = "Great! Let's proceed. I've sent an OTP to your registered mobile number ending in 8899. Please enter it."
+            
+            # Sub-decision 3C: Modification?
+            elif intent_name == 'modification_request':
+                response_message = self.sales_agent.craft_pitch(
+                    context=state.dict(),
+                    user_message=user_input,
+                    mode='renegotiation',
+                    modification={'request': user_input}
+                )
+            else:
+                # Continue conversation
+                response_message = self.sales_agent.craft_pitch(context=state.dict(), user_message=user_input, mode='needs_discovery')
+
+        # DECISION POINT 4: Verification
+        elif state.stage == "VERIFICATION":
+            if intent_name == 'otp_submission' or (user_input.isdigit() and len(user_input) == 4):
+                # Simple OTP check (4-digit demo OTP). In a full
+                # implementation this would call OTPService / Redis.
+                next_stage = "UNDERWRITING"
+
+                # Mark KYC as verified in state
+                state.kyc.otp_status = "verified"
+                state.kyc.verified = True
+                if not state.kyc.phone_mask:
+                    state.kyc.phone_mask = "XXXX8899"
+
+                # Generate a short KYC verification summary
+                verification_context = {
+                    "name": state.customer_profile.get("name"),
+                    "customer_id": state.customer_profile.get("customer_id"),
+                    "phone_mask": state.kyc.phone_mask,
+                    "kyc_status": "verified",
+                }
+                kyc_message = self.verification_agent.summarize_checks(verification_context)
+
+                # DECISION POINT 5: Underwriting
+                # Call mock bureau to attach a bureau snapshot for explainability
+                try:
+                    bureau_report = self.bureau.fetch_report(state.customer_profile.get("pan"))
+                    # Persist bureau snapshot for explainability
+                    state.underwriting["bureau_report"] = bureau_report.dict()
+                    # Also surface credit_score on the customer profile for downstream agents
+                    state.customer_profile["credit_score"] = bureau_report.score
+                except Exception:
+                    # Non-fatal: underwriting can proceed without bureau details
+                    pass
+
+                # Edge Case #1: Credit Score Check
+                credit_eval = self.underwriting_agent.evaluate_credit_score(state.customer_profile)
+                
+                if credit_eval['decision'] == 'REJECTED':
+                    next_stage = "REJECTED"
+                    summary = (
+                        "Thank you for waiting. Unfortunately, we cannot approve the loan at this time. "
+                        f"Reason: {credit_eval.get('reason')}. "
+                        "Here are some steps that can improve your approval chances over the next few months: "
+                        "reduce existing EMIs, keep credit card utilization low, and avoid new enquiries."
+                    )
+                    explain_payload = {
+                        "decision": "rejected",
+                        "summary": summary,
+                        "factors": [
+                            {
+                                "name": "credit_score",
+                                "value": str(credit_eval.get("credit_score")),
+                                "threshold": ">= 700",
+                                "status": "fail",
+                                "reason": "Credit score below minimum threshold.",
+                            }
+                        ],
+                    }
+                    underwriting_message = self.underwriting_agent.explain_decision(explain_payload)
+                    response_message = f"{kyc_message} {underwriting_message or summary}"
+                else:
+                    # Edge Case #2: Conditional Approval
+                    loan_req = state.loan_request.dict()
+                    if not loan_req.get("amount"):
+                        # For demo, fall back to either offer amount or a default
+                        loan_req["amount"] = state.offer.amount or 500000
+                    
+                    approval_eval = self.underwriting_agent.evaluate_conditional_approval(state.customer_profile, loan_req)
+                    
+                    if approval_eval['decision'] == 'CONDITIONAL_APPROVAL':
+                        next_stage = "DOCUMENT_UPLOAD"
+                        response_message = (
+                            f"{kyc_message} "
+                            f"Good news! Your credit score is excellent. "
+                            f"Since you requested ₹{loan_req['amount']}, which is above your pre-approved limit, "
+                            "I just need your latest salary slip to verify affordability."
+                        )
+                    elif approval_eval['decision'] == 'INSTANT_APPROVAL':
+                        next_stage = "SANCTION"
+                        response_message = (
+                            f"{kyc_message} "
+                            "Congratulations! Your loan is fully approved. Here is your sanction letter."
+                        )
+                    else:
+                        next_stage = "REJECTED"
+                        rejection_summary = "We could not approve the requested amount."
+                        explain_payload = {
+                            "decision": "rejected",
+                            "summary": rejection_summary,
+                            "factors": [],
+                        }
+                        underwriting_message = self.underwriting_agent.explain_decision(explain_payload)
+                        response_message = f"{kyc_message} {underwriting_message or rejection_summary}"
+
+            elif intent_name == 'kyc_mismatch':
+                response_message = "I've noted that. Connecting you to a human agent to update KYC."
+                next_stage = "COMPLETED" # Handoff
+            else:
+                response_message = "Please enter the 4-digit OTP sent to your mobile."
+
+        # DECISION POINT 6: Document Collection
+        elif state.stage == "DOCUMENT_UPLOAD":
+            # Triggered when salary slip has been uploaded via /upload/salary-slip
+            if payload.event == "document_uploaded" and state.salary_slip.net_monthly_salary:
+                response_message = "Analyzing your salary slip... [Processing]..."
+
+                salary_data = {
+                    "net_monthly_salary": state.salary_slip.net_monthly_salary,
+                    "employer": state.customer_profile.get("employer") or "",
+                }
+
+                loan_req = state.loan_request.dict()
+                if not loan_req.get("amount"):
+                    loan_req["amount"] = state.offer.amount or 500000
+                if not loan_req.get("emi"):
+                    loan_req["emi"] = state.offer.emi or 0
+
+                decision = self.underwriting_agent.reevaluate_with_salary(
+                    state.customer_profile,
+                    loan_req,
+                    salary_data,
+                )
+
+                if decision.get("decision") == "APPROVED":
+                    next_stage = "SANCTION"
+                    response_message = (
+                        f"Excellent! Salary verified (₹{salary_data['net_monthly_salary']}). "
+                        f"Your EMI is comfortable ({decision.get('emi_to_income_ratio'):.1f}% of income). "
+                        "Loan APPROVED!"
+                    )
+                else:
+                    summary = (
+                        "We could not approve the full amount based on the salary slip. "
+                        f"{decision.get('reason', 'Please talk to a human agent for options.') }"
+                    )
+                    explain_payload = {
+                        "decision": decision.get("decision"),
+                        "summary": summary,
+                        "factors": [],
+                    }
+                    underwriting_message = self.underwriting_agent.explain_decision(explain_payload)
+                    response_message = underwriting_message or summary
+            else:
+                response_message = "Please upload your salary slip (PDF/Image) to proceed."
+
+        # DECISION POINT 7: Sanction
+        elif state.stage == "SANCTION":
+            # Generate a local sanction letter PDF and summarize it for the user
+            loan_details = {
+                "amount": state.offer.amount or state.loan_request.requested_amount,
+                "tenure": state.offer.tenure or state.loan_request.requested_tenure,
+                "emi": state.offer.emi,
+                "rate": state.offer.personalized_rate or state.offer.standard_rate,
+            }
+
+            sanction_meta = self.sanction_agent.generate_letter(state.customer_profile, loan_details)
+
+            state.sanction.sanction_number = sanction_meta.get("sanction_number")
+            state.sanction.pdf_url = sanction_meta.get("file_path")
+            state.sanction.valid_until = sanction_meta.get("valid_until")
+
+            summary_payload = {
+                "customer": state.customer_profile,
+                "loan": loan_details,
+                "sanction": sanction_meta,
+            }
+
+            summary_message = self.sanction_agent.format_summary(summary_payload)
+
+            # Fire-and-forget notification via mock notification server
+            try:
+                customer = state.customer_profile or {}
+                self.notifications.send_sanction_notification(
+                    email=customer.get("email"),
+                    phone=customer.get("phone"),
+                    customer_name=customer.get("name", "Valued Customer"),
+                    amount=loan_details["amount"] or 0.0,
+                    tenure_months=loan_details["tenure"] or 0,
+                    rate=loan_details["rate"] or 0.0,
+                    sanction_number=state.sanction.sanction_number or "UNKNOWN",
+                )
+            except Exception:
+                # Do not break chat flow if notification fails
+                pass
+            next_stage = "COMPLETED"
+            response_message = summary_message or (
+                "Thank you! Your sanction letter has been generated and saved to your documents. "
+                "Funds will be disbursed in 2 hours."
+            )
+
+        # Fallback
+        else:
+            response_message = self.sales_agent.craft_pitch(context=state.dict(), user_message=user_input, mode='needs_discovery')
+
+        # Update State
+        state.stage = next_stage
+
+        # Append a lightweight audit trail of the conversation turn so
+        # that the full chatbot message history is stored alongside the
+        # loan pipeline state (in Redis / DB via StateManager).
+        audit_entry = AuditEntry(
+            timestamp=datetime.now(timezone.utc),
+            actor="system",
+            action="orchestrate_turn",
+            input_snapshot={
+                "user_message": user_input,
+                "stage_before": state.stage,
+                "intent": intent_name,
+            },
+            output_snapshot={
+                "message_to_user": response_message,
+                "next_stage": next_stage,
+            },
             model_version=self.llm_client.model_version,
         )
+        try:
+            state.audit_log.append(audit_entry.model_dump())
+        except Exception:
+            # If audit logging fails, don't break the main flow.
+            pass
 
-        self.analytics.track_event(
-            "orchestrator_response",
-            {
-                "conversation_id": conversation_id,
-                "stage": stage,
-                "intent": state.last_intent,
-                "action": response.next_action,
-            },
+        self.state_manager.upsert_state(state)
+        
+        # Determine next_action and invoke_worker
+        action = "continue"
+        worker_info = {"name": "orchestrator", "payload": {}}
+
+        if next_stage == "VERIFICATION" and "OTP" in response_message:
+             action = "request_otp"
+        elif next_stage == "DOCUMENT_UPLOAD":
+             action = "request_upload"
+        elif next_stage == "COMPLETED":
+             action = "end"
+        elif next_stage == "REJECTED":
+             action = "end"
+        
+        # Construct Response
+        return OrchestratorResponse(
+            conversation_id=state.conversation_id,
+            stage=state.stage,
+            message_to_user=response_message,
+            state_updates=state.dict(),
+            model_version=self.llm_client.model_version,
+            invoke_worker=worker_info,
+            audit_entry=audit_entry.model_dump(),
+            next_action=action,
         )
-        return response
 
     def _hydrate_crm_snapshot(self, state: OrchestratorState) -> None:
-        if state.customer_id and not state.kyc.crm_snapshot:
-            state.kyc.crm_snapshot = self.crm.get_customer_profile(state.customer_id)
-
-    def _enrich_state(self, state: OrchestratorState, payload: OrchestratorRequest) -> Dict[str, Any]:
-        context: Dict[str, Any] = {}
-        message = payload.user_message or ""
-        if message:
-            emotion = EmotionDetector.detect(message)
-            state.emotion.primary = emotion["primary"]
-            state.emotion.confidence = emotion["confidence"]
-            intent, confidence = IntentClassifier.classify(message)
-            state.last_intent = intent
-            context.update({"intent_confidence": confidence})
-            transcript_score = self.scoring_engine.score_conversation(message)
-            state.flags.fallback_needed = transcript_score["engagement"] < 0.2
-            context["engagement"] = transcript_score["engagement"]
-
-        offer_update = self._refresh_offer(state, payload)
-        context.update(offer_update)
-        return context
-
-    def _refresh_offer(self, state: OrchestratorState, payload: OrchestratorRequest) -> Dict[str, Any]:
-        requested_amount = payload.loan_request.get("loan_amount") or state.loan_request.requested_amount or 500000.0
-        requested_tenure = payload.loan_request.get("tenure_months") or state.loan_request.requested_tenure or 60
-        credit_score = payload.customer_profile.get("credit_score") if payload.customer_profile else None
-        loyalty_years = state.kyc.crm_snapshot.get("loyalty_years") if state.kyc.crm_snapshot else None
-        auto_debit = bool(state.kyc.crm_snapshot.get("auto_debit_enabled")) if state.kyc.crm_snapshot else False
-        utilization_lt_30 = bool(state.kyc.crm_snapshot.get("utilization_lt_30")) if state.kyc.crm_snapshot else False
-        is_home_loan_customer = bool(state.kyc.crm_snapshot.get("is_home_loan_customer")) if state.kyc.crm_snapshot else False
-
-        offer = self.pricing_engine.price_offer(
-            principal=requested_amount,
-            tenure_months=requested_tenure,
-            credit_score=credit_score,
-            loyalty_years=loyalty_years,
-            auto_debit_enabled=auto_debit,
-            utilization_lt_30=utilization_lt_30,
-            is_home_loan_customer=is_home_loan_customer,
-        )
-        state.offer.amount = requested_amount
-        state.offer.tenure = requested_tenure
-        state.offer.personalized_rate = offer["rate"]
-        state.offer.emi = offer["emi"]
-        state.loan_request.requested_amount = requested_amount
-        state.loan_request.requested_tenure = requested_tenure
-        return offer
-
-    def _maybe_run_underwriting(self, state: OrchestratorState) -> Optional[UnderwritingExplainability]:
-        if state.stage != "UNDERWRITING":
-            return None
-        bureau_report = self.bureau.fetch_report(state.customer_id)
-        state.underwriting["bureau"] = bureau_report.dict()
-        explainability = run_underwriting_rules(
-            credit_score=bureau_report.score,
-            loan_amount=state.offer.amount or 0.0,
-            pre_approved_limit=state.underwriting.get("pre_approved_limit"),
-            monthly_income=state.salary_slip.net_monthly_salary,
-            proposed_emi=state.offer.emi,
-        )
-        state.underwriting.update(explainability.dict())
-        return explainability
-
-    def _build_worker_payload(
-        self,
-        stage: StageType,
-        state: OrchestratorState,
-        explainability: Optional[UnderwritingExplainability],
-    ) -> Dict[str, Any]:
-        payload = {
-            "conversation_id": state.conversation_id,
-            "stage": stage,
-            "intent": state.last_intent,
-            "emotion": state.emotion.dict(),
-        }
-        if explainability:
-            payload["explainability"] = explainability.dict()
-        worker = self.router.worker_for_stage(stage)
-        return {"worker": worker, "payload": payload}
-
-    def _compose_message(
-        self,
-        stage: StageType,
-        state: OrchestratorState,
-        explainability: Optional[UnderwritingExplainability],
-        user_message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        if stage == "SALES":
-            # Use the SalesAgent to generate a dynamic response
-            sales_context = {
-                "offer_amount": state.offer.amount,
-                "offer_tenure": state.offer.tenure,
-                "offer_rate": state.offer.personalized_rate,
-                "offer_emi": state.offer.emi,
-                "customer_name": state.kyc.crm_snapshot.get("name") if state.kyc.crm_snapshot else "Customer",
+        """Populate basic customer profile for demo flows."""
+        if not state.customer_profile:
+            # In real implementation, this would call self.crm.get_customer_profile
+            state.customer_profile = {
+                "name": "Rajesh Kumar",
+                "customer_id": "CUST001",
+                "pre_approved_limit": 300000,
+                "monthly_income": 80000,
+                "credit_score": 750,
+                "existing_loans": [{"type": "Auto Loan", "emi": 10000}],
             }
-            if context:
-                sales_context.update(context)
-            return self.sales_agent.craft_pitch(sales_context, user_message or "")
-
-        if stage == "VERIFICATION":
-            return "I have triggered an OTP to your registered mobile number. Please verify to continue."
-        if stage == "DOCUMENT_UPLOAD":
-            return "Please upload your latest salary slip so that underwriting can proceed."
-        if stage == "UNDERWRITING" and explainability:
-            return explainability.summary or "Underwriting completed."
-        if stage == "SANCTION" and state.sanction.sanction_number:
-            return (
-                f"Congratulations! Sanction letter {state.sanction.sanction_number} is ready. "
-                f"Download it before {state.sanction.valid_until}."
-            )
-        if stage == "GAMIFICATION":
-            badge = self.gamification_engine.assign_badge(stage, len(state.audit_log))
-            return badge["message"]
-        if stage == "ECOSYSTEM_OFFERS":
-            offers = self.offers.list_partner_offers()
-            return f"Unlocked partner offers: {', '.join(o['partner'] for o in offers)}"
-        return "Your journey is on track. Let me know how I can help further."
-
-    def _create_audit_entry(
-        self,
-        stage: StageType,
-        payload: OrchestratorRequest,
-        worker_payload: Dict[str, Any],
-        message: str,
-    ) -> AuditEntry:
-        return AuditEntry(
-            timestamp=datetime.now(tz=timezone.utc),
-            actor="master_orchestrator",
-            action=f"stage_{stage.lower()}",
-            input_snapshot=payload.dict(),
-            output_snapshot={"message": message, "worker": worker_payload["worker"]},
-            model_version=self.llm_client.model_version,
-        )

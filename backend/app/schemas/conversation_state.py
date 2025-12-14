@@ -64,6 +64,11 @@ class SanctionState(BaseModel):
     sanction_number: Optional[str] = None
     pdf_url: Optional[str] = None
     valid_until: Optional[str] = None
+    accepted: bool = False
+    disbursed: bool = False
+    disbursement_amount: Optional[float] = None
+    disbursement_reference: Optional[str] = None
+    disbursed_at: Optional[str] = None
 
 
 class FlagState(BaseModel):
@@ -75,6 +80,7 @@ class FlagState(BaseModel):
 class OrchestratorState(BaseModel):
     conversation_id: Optional[str] = None
     customer_id: Optional[str] = None
+    customer_profile: Dict[str, Any] = Field(default_factory=dict)
     language: Literal["en", "hi", "ta", "te", "bn", "mr"] = "en"
     stage: Optional[StageType] = None
     last_intent: Optional[str] = None

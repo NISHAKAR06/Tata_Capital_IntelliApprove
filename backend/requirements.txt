@@ -5,4 +5,22 @@ pydantic-settings>=2.0.0
 python-multipart>=0.0.9
 httpx>=0.27.0
 SQLAlchemy>=2.0.31
-google-generativeai>=0.8.0
+
+# Caching / state
+redis>=5.0.0
+
+# OCR
+pytesseract>=0.3.10
+Pillow>=10.0.0
+
+# Embeddings
+sentence-transformers>=2.7.0
+
+# Vector database
+weaviate-client>=4.6.0
+
+# PDF generation for local sanction letters
+reportlab>=3.6.0
+
+# Google Cloud Speech-to-Text
+google-cloud-speech>=2.26.0

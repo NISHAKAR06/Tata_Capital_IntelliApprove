@@ -1,0 +1,5 @@
+ERROR_CODES = {
+    "GENERIC": "E0001",
+    "VALIDATION": "E0100",
+    "SERVICE": "E0200",
+}

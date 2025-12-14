@@ -3,25 +3,22 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.middleware.cors_config import add_cors
 
 from app.api.v1 import admin_routes, chat_routes, otp_routes, sanction_routes, upload_routes
-from app.config.logging_conf import configure_logging
 from app.config.settings import get_settings
 
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application instance."""
-    configure_logging()
     settings = get_settings()
 
-    app = FastAPI(title=settings.project_name, version="0.1.0")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+    app = FastAPI(
+        title=settings.project_name,
+        version="0.1.0",
     )
+    # Use centralized CORS config per target structure
+    add_cors(app)
 
     prefix = settings.api_v1_prefix.rstrip("/")
     app.include_router(chat_routes.router, prefix=prefix)

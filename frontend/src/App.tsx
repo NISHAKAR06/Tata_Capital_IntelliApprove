@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ConversationProvider } from "@/contexts/ConversationContext";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -28,23 +29,25 @@ const App = () => (
       <Sonner />
       <ThemeProvider>
         <LanguageProvider>
-          <BrowserRouter>
-            <GlobalHeader />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/dashboard/chat" element={<LoanChat />} />
-              <Route path="/dashboard/progress" element={<ProgressTracker />} />
-              <Route path="/dashboard/status" element={<CurrentLoanStatus />} />
-              <Route path="/dashboard/documents" element={<DocumentUpload />} />
-              <Route path="/dashboard/sanction" element={<SanctionLetter />} />
-              <Route path="/dashboard/history" element={<LoanHistory />} />
-              <Route path="/dashboard/analytics" element={<Analytics />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          <ConversationProvider>
+            <BrowserRouter>
+              <GlobalHeader />
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/dashboard/chat" element={<LoanChat />} />
+                <Route path="/dashboard/progress" element={<ProgressTracker />} />
+                <Route path="/dashboard/status" element={<CurrentLoanStatus />} />
+                <Route path="/dashboard/documents" element={<DocumentUpload />} />
+                <Route path="/dashboard/sanction" element={<SanctionLetter />} />
+                <Route path="/dashboard/history" element={<LoanHistory />} />
+                <Route path="/dashboard/analytics" element={<Analytics />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </ConversationProvider>
         </LanguageProvider>
       </ThemeProvider>
     </TooltipProvider>

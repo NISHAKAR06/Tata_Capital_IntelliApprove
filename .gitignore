@@ -24,8 +24,19 @@ dist-ssr
 *.sw?
 
 # Backend Secrets & Config
+# Generic env files (root and subfolders)
+.env
+*.env
+**/.env.local
+
+# Backend-specific env
 backend/.env
+
+# Backend key material (JSON and common key formats)
 backend/app/config/keys/*.json
+backend/app/config/keys/*.pem
+backend/app/config/keys/*.p12
+backend/app/config/keys/*.key
 !backend/app/config/keys/.gitkeep
 
 # Python

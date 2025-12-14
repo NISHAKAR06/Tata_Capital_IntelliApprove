@@ -1,1 +1,0 @@
-Summarize sanction letter details; congratulate without overpromising.Congratulate the user, summarize the sanctioned amount, tenure, and rate, and direct them to download the sanction letter. Mention validity date.
