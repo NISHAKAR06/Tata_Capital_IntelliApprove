@@ -79,13 +79,14 @@ export const DashboardSidebar = ({ isCollapsed, setIsCollapsed }: DashboardSideb
       {/* Stepper Navigation */}
       <nav className="flex-1 py-6 px-3 overflow-y-auto">
         <div className="relative">
-          {/* Progress Line */}
-          <div className="absolute left-[19px] top-0 bottom-0 w-0.5 bg-border">
+          {/* Progress Line: thin, centered under icons; fill animates smoothly via scaleY */}
+          <div className="absolute left-8 top-6 bottom-6 w-px bg-muted-foreground/20">
             <motion.div
-              className="w-full bg-primary"
-              initial={{ height: 0 }}
-              animate={{ height: `${((activeIdx + 1) / menuItems.length) * 100}%` }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="w-full bg-primary rounded"
+              style={{ transformOrigin: "top" }}
+              initial={{ scaleY: 0 }}
+              animate={{ scaleY: (activeIdx + 1) / menuItems.length }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
             />
           </div>
 

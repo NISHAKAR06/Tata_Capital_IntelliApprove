@@ -45,6 +45,11 @@ class SalesAgent:
         elif context.get('language') == 'hi':
              language_instruction = "Use Hindi or Hinglish as requested."
 
+        # --- DYNAMIC OFFER CALCULATION ---
+        # If the user mentioned an amount, calculate the real EMI so the LLM doesn't hallucinate.
+        context = self._inject_real_offer(user_message, context)
+        # ---------------------------------
+
         base_prompt = self._base_system_prompt or (
             "You are 'IntelliApprove', an advanced AI loan agent for Tata Capital. "
             "Your goal is to assist customers with personal loans, explain offers, and guide them through the application process. "
@@ -91,7 +96,18 @@ class SalesAgent:
             f"MODE: {mode}\n"
             f"CONTEXT DATA: {json.dumps(context, default=str)}\n"
             f"INSTRUCTIONS: {specific_instructions}\n"
-            "Keep response under 100 words. Be persuasive but ethical."
+            "CRITICAL INSTRUCTION: Use the 'offer' data in CONTEXT DATA for the loan amount, EMI, and Rate. "
+            "Do NOT calculate them yourself. Use the exact numbers provided in the context.\n"
+            "FORMATTING RULES:\n"
+            "- Do NOT use long paragraphs.\n"
+            "- Use bullet points (•) for lists or key details.\n"
+            "- Use short, punchy sentences.\n"
+            "- Structure the response clearly with line breaks.\n"
+            "- If presenting numbers (EMI, Rate, Amount), put them on separate lines.\n"
+            "- STRICTLY NO EMOJIS. Do not use any emojis in the response.\n"
+            "Keep response under 100 words. Be persuasive but ethical. "
+            "IMPORTANT: Do not output the prompt, mode, or context data. "
+            "Only output the final response to the user."
         )
 
         response = self._client.generate(prompt, f"USER SAYS: {user_message}", max_tokens=300)
@@ -100,7 +116,72 @@ class SalesAgent:
             # conversation stays contextual and does not repeat a generic line.
             return self._rule_based_pitch(context, user_message, mode, concern_type, modification)
 
+        # Clean up response if it accidentally includes the prompt or debug info
+        if "MODE:" in response or "CONTEXT DATA:" in response:
+             # If the model hallucinated and printed the prompt, try to strip it
+             # or fall back to rule-based if it's too messy.
+             if "USER SAYS:" in response:
+                 response = response.split("USER SAYS:")[-1].strip()
+             else:
+                 # Fallback if we can't cleanly separate
+                 return self._rule_based_pitch(context, user_message, mode, concern_type, modification)
+
         return response
+
+    def _inject_real_offer(self, user_message: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract amount from text and calculate real EMI using PricingEngine."""
+        import re
+        
+        # 1. Try to find amount in user message (e.g. 400000, 4,00,000)
+        amount = None
+        # Remove commas to make regex easier
+        clean_msg = user_message.replace(",", "")
+        # Find numbers > 10000
+        numbers = re.findall(r'\b\d{5,8}\b', clean_msg)
+        
+        if numbers:
+            amount = int(numbers[0])
+        
+        # 2. If not in message, check if already in context
+        if not amount:
+            amount = context.get('loan_request', {}).get('requested_amount')
+            
+        # 3. If we have an amount, calculate the offer
+        if amount:
+            # Default tenure to 24 months if not specified
+            tenure = context.get('loan_request', {}).get('requested_tenure') or 24
+            
+            # Get profile data
+            profile = context.get('customer_profile') or {}
+            credit_score = profile.get('credit_score', 750) # Default good score
+            
+            # Calculate using the engine
+            offer = self._pricing_engine.price_offer(
+                principal=float(amount),
+                tenure_months=int(tenure),
+                credit_score=credit_score,
+                loyalty_years=profile.get('loyalty_years', 0),
+                auto_debit_enabled=True,
+                utilization_lt_30=True,
+                is_home_loan_customer=False
+            )
+            
+            # Update context with REAL numbers
+            context['offer'] = {
+                "amount": amount,
+                "tenure": tenure,
+                "rate": round(offer['rate'] * 100, 2), # Convert decimal to %
+                "emi": int(offer['emi']),
+                "processing_fee": 0
+            }
+            
+            # Ensure loan_request reflects this too
+            if 'loan_request' not in context:
+                context['loan_request'] = {}
+            context['loan_request']['requested_amount'] = amount
+            context['loan_request']['requested_tenure'] = tenure
+            
+        return context
 
     def handle_affordability_objection(self, customer_profile: Dict, loan_terms: Dict) -> Dict:
         """

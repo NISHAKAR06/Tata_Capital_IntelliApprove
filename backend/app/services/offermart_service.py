@@ -25,6 +25,16 @@ class OffermartService:
         except Exception:
             return None
 
+    def check_eligibility(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Call the mock /check-eligibility endpoint and return its body."""
+
+        return self._post("/check-eligibility", payload)
+
+    def generate_offers(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Call the mock /generate-offers endpoint and return its body."""
+
+        return self._post("/generate-offers", payload)
+
     def get_best_offer(
         self,
         *,

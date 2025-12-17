@@ -10,6 +10,9 @@ from app.services.audio_service import AudioService
 from app.services.otp_service import OTPService
 from app.services.pdf_service import PDFService
 from app.services.storage_service import StorageService
+from app.services.offermart_service import OffermartService
+from app.services.bureau_service import BureauService
+from app.workers.underwriting_agent import UnderwritingAgent
 
 _logger = logging.getLogger("intelliapprove")
 
@@ -42,3 +45,15 @@ def get_otp_service() -> OTPService:
 
 def get_audio_service() -> AudioService:
     return AudioService()
+
+
+def get_offermart_service() -> OffermartService:
+    return OffermartService()
+
+
+def get_bureau_service() -> BureauService:
+    return BureauService()
+
+
+def get_underwriting_agent() -> UnderwritingAgent:
+    return UnderwritingAgent()

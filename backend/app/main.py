@@ -5,7 +5,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.middleware.cors_config import add_cors
 
-from app.api.v1 import admin_routes, chat_routes, otp_routes, sanction_routes, upload_routes
+from app.api.v1 import (
+    admin_routes,
+    chat_routes,
+    otp_routes,
+    sanction_routes,
+    upload_routes,
+    offermart_routes,
+    bureau_routes,
+    underwriting_routes,
+    loan_routes,
+)
 from app.config.settings import get_settings
 
 
@@ -26,6 +36,10 @@ def create_app() -> FastAPI:
     app.include_router(otp_routes.router, prefix=prefix)
     app.include_router(sanction_routes.router, prefix=prefix)
     app.include_router(admin_routes.router, prefix=prefix)
+    app.include_router(offermart_routes.router, prefix=prefix)
+    app.include_router(bureau_routes.router, prefix=prefix)
+    app.include_router(underwriting_routes.router, prefix=prefix)
+    app.include_router(loan_routes.router, prefix=prefix)
 
     @app.get("/health", tags=["System"])
     def healthcheck() -> dict[str, str]:

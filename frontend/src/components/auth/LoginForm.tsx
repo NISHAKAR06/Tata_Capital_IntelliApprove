@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "@/contexts/LanguageContext";
+import { useConversation } from "@/contexts/ConversationContext";
+import { postChatMessage } from "@/lib/api";
 
 export const LoginForm = () => {
   const [email, setEmail] = useState("");
@@ -16,6 +18,7 @@ export const LoginForm = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const { setConversationId, setLastResponse, resetConversation } = useConversation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +32,20 @@ export const LoginForm = () => {
       description: "You have successfully logged in.",
     });
     
-    navigate("/dashboard");
+    // Bootstrap a fresh conversation welcome message immediately on login
+    try {
+      resetConversation();
+      const resp = await postChatMessage("", {});
+      if (resp.conversation_id) {
+        setConversationId(resp.conversation_id);
+      }
+      setLastResponse(resp);
+    } catch (e) {
+      // Non-blocking; still navigate even if backend bootstrap fails
+      console.error("Failed to bootstrap conversation on login", e);
+    }
+
+    navigate("/dashboard/chat");
     setIsLoading(false);
   };
 

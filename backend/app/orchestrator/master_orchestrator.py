@@ -136,14 +136,19 @@ class MasterOrchestrator:
                 self._hydrate_crm_snapshot(state)
 
         # 2. Analyze Input
-        emotion_result = self.emotion_detector.detect(user_input)
-        intent_name, intent_conf = self.intent_classifier.classify(user_input)
-        
-        # Language Detection (Simple)
-        if "english" in user_input.lower() and "tell" in user_input.lower():
-            state.language = "en"
-        elif "hindi" in user_input.lower() or "hinglish" in user_input.lower():
-            state.language = "hi"
+        if user_input and user_input.strip():
+            emotion_result = self.emotion_detector.detect(user_input)
+            intent_name, intent_conf = self.intent_classifier.classify(user_input)
+            
+            # Language Detection (Simple)
+            if "english" in user_input.lower() and "tell" in user_input.lower():
+                state.language = "en"
+            elif "hindi" in user_input.lower() or "hinglish" in user_input.lower():
+                state.language = "hi"
+        else:
+            # Skip analysis for empty input (e.g. initial load)
+            emotion_result = {"primary": "neutral", "confidence": 1.0}
+            intent_name, intent_conf = (None, 0.0)
 
         state.last_intent = intent_name
 
@@ -177,20 +182,22 @@ class MasterOrchestrator:
                     system_prompt=self.master_system_prompt,
                     user_prompt=(
                         "A new customer has just opened the chat window but "
-                        "has not typed anything yet. Start the conversation."
+                        "has not typed anything yet. Start the conversation. "
+                        "Format the response with short lines or bullet points. Do not use a paragraph. "
+                        "STRICTLY NO EMOJIS."
                     ),
                     max_tokens=160,
                 )
                 response_message = llm_greeting or (
-                    "Hi, I'm IntelliApprove, your AI loan assistant from Tata Capital. "
-                    "I can help you explore personal loan options tailored to you. "
-                    "To get started, tell me how much you need and for how long."
+                    "Hi, I'm IntelliApprove, your AI loan assistant from Tata Capital.\n\n"
+                    "• I can help you explore personal loan options tailored to you.\n"
+                    "• To get started, tell me how much you need and for how long."
                 )
             else:
                 response_message = (
-                    "Hi, I'm IntelliApprove, your AI loan assistant from Tata Capital. "
-                    "I can help you explore personal loan options tailored to you. "
-                    "To get started, tell me how much you need and for how long."
+                    "Hi, I'm IntelliApprove, your AI loan assistant from Tata Capital.\n\n"
+                    "• I can help you explore personal loan options tailored to you.\n"
+                    "• To get started, tell me how much you need and for how long."
                 )
             state.stage = next_stage
 
@@ -199,7 +206,7 @@ class MasterOrchestrator:
             if intent_name in ['positive_interest', 'ask_loan', 'proceed_agreement']:
                 next_stage = "SALES"
                 response_message = self.sales_agent.craft_pitch(
-                    context=state.dict(), 
+                    context=state.model_dump(), 
                     user_message=user_input, 
                     mode='needs_discovery'
                 )
@@ -208,14 +215,14 @@ class MasterOrchestrator:
                 next_stage = "COMPLETED"
             elif intent_name == 'ask_rate' or intent_name == 'ask_emi':
                  response_message = self.sales_agent.craft_pitch(
-                    context=state.dict(), 
+                    context=state.model_dump(), 
                     user_message=user_input, 
                     mode='information_only'
                 )
             else:
                  # Default fallthrough to sales
                  next_stage = "SALES"
-                 response_message = self.sales_agent.craft_pitch(context=state.dict(), user_message=user_input, mode='needs_discovery')
+                 response_message = self.sales_agent.craft_pitch(context=state.model_dump(), user_message=user_input, mode='needs_discovery')
 
         # DECISION POINT 3: Sales Engagement
         elif state.stage == "SALES":
@@ -230,10 +237,10 @@ class MasterOrchestrator:
                 # Get objection handling data
                 objection_data = {}
                 if concern_type == 'affordability_anxiety':
-                    objection_data = self.sales_agent.handle_affordability_objection(state.customer_profile, state.loan_request.dict())
+                    objection_data = self.sales_agent.handle_affordability_objection(state.customer_profile, state.loan_request.model_dump())
                 
                 response_message = self.sales_agent.craft_pitch(
-                    context={**state.dict(), **objection_data},
+                    context={**state.model_dump(), **objection_data},
                     user_message=user_input,
                     mode='objection_handling',
                     concern_type=concern_type
@@ -247,14 +254,14 @@ class MasterOrchestrator:
             # Sub-decision 3C: Modification?
             elif intent_name == 'modification_request':
                 response_message = self.sales_agent.craft_pitch(
-                    context=state.dict(),
+                    context=state.model_dump(),
                     user_message=user_input,
                     mode='renegotiation',
                     modification={'request': user_input}
                 )
             else:
-                # Continue conversation
-                response_message = self.sales_agent.craft_pitch(context=state.dict(), user_message=user_input, mode='needs_discovery')
+                # Default: continue sales pitch
+                response_message = self.sales_agent.craft_pitch(context=state.model_dump(), user_message=user_input, mode='needs_discovery')
 
         # DECISION POINT 4: Verification
         elif state.stage == "VERIFICATION":
@@ -286,14 +293,16 @@ class MasterOrchestrator:
                     state.underwriting["bureau_report"] = bureau_report.dict()
                     # Also surface credit_score on the customer profile for downstream agents
                     state.customer_profile["credit_score"] = bureau_report.score
+                    # Attach raw bureau snapshot so underwriting rules can see defaults / enquiries
+                    state.customer_profile["bureau_report"] = bureau_report.dict()
                 except Exception:
                     # Non-fatal: underwriting can proceed without bureau details
                     pass
 
-                # Edge Case #1: Credit Score Check
+                # Edge Case: Credit Score + DTI + defaults
                 credit_eval = self.underwriting_agent.evaluate_credit_score(state.customer_profile)
-                
-                if credit_eval['decision'] == 'REJECTED':
+
+                if credit_eval.get("decision") == "REJECT":
                     next_stage = "REJECTED"
                     summary = (
                         "Thank you for waiting. Unfortunately, we cannot approve the loan at this time. "
@@ -307,7 +316,7 @@ class MasterOrchestrator:
                         "factors": [
                             {
                                 "name": "credit_score",
-                                "value": str(credit_eval.get("credit_score")),
+                                "value": str(credit_eval.get("credit_score")) if credit_eval.get("credit_score") is not None else None,
                                 "threshold": ">= 700",
                                 "status": "fail",
                                 "reason": "Credit score below minimum threshold.",
@@ -317,31 +326,58 @@ class MasterOrchestrator:
                     underwriting_message = self.underwriting_agent.explain_decision(explain_payload)
                     response_message = f"{kyc_message} {underwriting_message or summary}"
                 else:
-                    # Edge Case #2: Conditional Approval
+                    # Combine pre‑approved limit, income and EMI into a richer decision
                     loan_req = state.loan_request.dict()
                     if not loan_req.get("amount"):
                         # For demo, fall back to either offer amount or a default
                         loan_req["amount"] = state.offer.amount or 500000
-                    
-                    approval_eval = self.underwriting_agent.evaluate_conditional_approval(state.customer_profile, loan_req)
-                    
-                    if approval_eval['decision'] == 'CONDITIONAL_APPROVAL':
+                    if not loan_req.get("emi") and state.offer.emi:
+                        loan_req["emi"] = state.offer.emi
+
+                    approval_eval = self.underwriting_agent.evaluate_conditional_approval(
+                        state.customer_profile,
+                        loan_req,
+                    )
+
+                    decision_flag = approval_eval.get("decision")
+
+                    if decision_flag == "NEEDS_SALARY_VERIFICATION":
+                        # Scenario 2: higher DTI band → ask for salary slip
                         next_stage = "DOCUMENT_UPLOAD"
                         response_message = (
                             f"{kyc_message} "
-                            f"Good news! Your credit score is excellent. "
-                            f"Since you requested ₹{loan_req['amount']}, which is above your pre-approved limit, "
-                            "I just need your latest salary slip to verify affordability."
+                            "Good news! You have a good chance of approval. "
+                            "I just need your latest salary slip to confirm your income before we proceed."
                         )
-                    elif approval_eval['decision'] == 'INSTANT_APPROVAL':
+                    elif decision_flag == "INSTANT_APPROVE":
+                        # Scenario 1 / 5: strong profile → straight to sanction
                         next_stage = "SANCTION"
                         response_message = (
                             f"{kyc_message} "
-                            "Congratulations! Your loan is fully approved. Here is your sanction letter."
+                            "Congratulations! Your loan is approved instantly based on your profile. "
+                            "Here is your sanction summary."
+                        )
+                    elif decision_flag == "MANUAL_REVIEW":
+                        # Scenario 3: multiple risk factors → manual review queue
+                        next_stage = "REJECTED"
+                        state.flags.needs_human = True
+                        explain_payload = {
+                            "decision": "manual_review",
+                            "summary": "Your application requires a human underwriter to review some risk factors.",
+                            "factors": [],
+                        }
+                        underwriting_message = self.underwriting_agent.explain_decision(explain_payload)
+                        response_message = (
+                            f"{kyc_message} "
+                            f"{underwriting_message}"
                         )
                     else:
+                        # Scenario 4: clear rejection (typically very high DTI)
                         next_stage = "REJECTED"
-                        rejection_summary = "We could not approve the requested amount."
+                        rejection_summary = approval_eval.get(
+                            "reason",
+                            "We could not approve the requested amount based on your current obligations.",
+                        )
                         explain_payload = {
                             "decision": "rejected",
                             "summary": rejection_summary,
@@ -484,20 +520,22 @@ class MasterOrchestrator:
         worker_info = {"name": "orchestrator", "payload": {}}
 
         if next_stage == "VERIFICATION" and "OTP" in response_message:
-             action = "request_otp"
+            action = "request_otp"
         elif next_stage == "DOCUMENT_UPLOAD":
-             action = "request_upload"
+            action = "request_upload"
         elif next_stage == "COMPLETED":
-             action = "end"
+            action = "end"
+        elif next_stage == "REJECTED" and state.flags.needs_human:
+            action = "manual_review"
         elif next_stage == "REJECTED":
-             action = "end"
+            action = "end"
         
         # Construct Response
         return OrchestratorResponse(
             conversation_id=state.conversation_id,
             stage=state.stage,
             message_to_user=response_message,
-            state_updates=state.dict(),
+            state_updates=state.model_dump(),
             model_version=self.llm_client.model_version,
             invoke_worker=worker_info,
             audit_entry=audit_entry.model_dump(),

@@ -75,7 +75,7 @@ class Settings(BaseSettings):
         default="sentence-transformers/all-MiniLM-L6-v2",
         env="EMBEDDINGS_MODEL_NAME",
     )
-    weaviate_url: str = Field(default="http://localhost:8080", env="WEAVIATE_URL")
+    weaviate_url: str = Field(default="http://localhost:8090", env="WEAVIATE_URL")
     weaviate_api_key: Optional[str] = Field(default=None, env="WEAVIATE_API_KEY")
 
     # Security / PII

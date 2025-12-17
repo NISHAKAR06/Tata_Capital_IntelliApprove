@@ -17,10 +17,37 @@ interface ChatMessage {
   content: string;
 }
 
+const TypewriterText = ({ text, shouldAnimate = false }: { text: string; shouldAnimate?: boolean }) => {
+  const [displayedText, setDisplayedText] = useState(shouldAnimate ? "" : text);
+
+  useEffect(() => {
+    if (!shouldAnimate) {
+      setDisplayedText(text);
+      return;
+    }
+
+    let i = 0;
+    setDisplayedText("");
+
+    const intervalId = setInterval(() => {
+      if (i < text.length) {
+        setDisplayedText((prev) => prev + text.charAt(i));
+        i++;
+      } else {
+        clearInterval(intervalId);
+      }
+    }, 20);
+
+    return () => clearInterval(intervalId);
+  }, [text, shouldAnimate]);
+
+  return <span>{displayedText}</span>;
+};
+
 const initialMessages: ChatMessage[] = [];
 
 const LoanChat = () => {
-  const { conversationId, setConversationId, setLastResponse } =
+  const { conversationId, lastResponse, setConversationId, setLastResponse } =
     useConversation();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
@@ -34,6 +61,20 @@ const LoanChat = () => {
   // Call backend once on first load to get a real welcome message
   useEffect(() => {
     if (hasBootstrapped.current) return;
+    // If the login flow already bootstrapped a response, use it to seed messages
+    if (messages.length === 0 && lastResponse?.message_to_user) {
+      const assistantMessage: ChatMessage = {
+        id: 1,
+        role: "assistant",
+        content:
+          lastResponse.message_to_user ||
+          "Hello! I'm your AI Loan Assistant. How can I help you today?",
+      };
+      setMessages([assistantMessage]);
+      hasBootstrapped.current = true;
+      return;
+    }
+
     if (messages.length > 0 || conversationId) return;
 
     hasBootstrapped.current = true;
@@ -66,7 +107,7 @@ const LoanChat = () => {
     };
 
     void bootstrap();
-  }, [conversationId, messages.length, setConversationId, setLastResponse]);
+  }, [conversationId, messages.length, lastResponse, setConversationId, setLastResponse]);
 
   const handleSend = async () => {
     if (!input.trim() || isSending) return;
@@ -254,7 +295,14 @@ const LoanChat = () => {
                       : "chat-bubble-ai"
                   }`}
                 >
-                  {message.content}
+                  {message.role === "assistant" ? (
+                    <TypewriterText 
+                      text={message.content} 
+                      shouldAnimate={index === messages.length - 1} 
+                    />
+                  ) : (
+                    message.content
+                  )}
                 </div>
               </motion.div>
             ))}

@@ -29,14 +29,33 @@ class VectorService:
         self._client = None
         if weaviate is not None:
             try:  # pragma: no cover - external client
-                auth = None
-                if self._settings.weaviate_api_key:
-                    auth = Auth.api_key(self._settings.weaviate_api_key)
+                url = self._settings.weaviate_url
+                api_key = self._settings.weaviate_api_key
 
-                self._client = weaviate.Client(
-                    self._settings.weaviate_url,
-                    auth_client_secret=auth,
-                )
+                # Weaviate v4 initialization
+                if "localhost" in url or "127.0.0.1" in url:
+                    # Extract port from URL if present (default 8080)
+                    port = 8080
+                    if ":" in url.split("//")[-1]:
+                        try:
+                            parts = url.split(":")
+                            if len(parts) > 2:  # http://host:port
+                                port = int(parts[-1].split("/")[0])
+                        except ValueError:
+                            pass
+
+                    self._client = weaviate.connect_to_local(port=port)
+                else:
+                    # Assume WCS or compatible remote
+                    auth_credentials = None
+                    if api_key:
+                        auth_credentials = Auth.api_key(api_key)
+
+                    self._client = weaviate.connect_to_wcs(
+                        cluster_url=url,
+                        auth_credentials=auth_credentials,
+                    )
+
             except Exception as e:  # pragma: no cover
                 print(f"VectorService: failed to init Weaviate client: {e}")
                 self._client = None
